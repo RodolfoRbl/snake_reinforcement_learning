@@ -2,6 +2,7 @@ import pygame
 import random
 from enum import Enum
 from collections import namedtuple
+import numpy as np
 
 pygame.init()
 font = pygame.font.SysFont("arial", 25)
@@ -84,6 +85,25 @@ class SnakeGame:
                     self.foods.append(new_food)
                     break
 
+    def get_state(self):
+        dist_food_hor = self.foods[0].x - self.head.x
+        dist_food_ver = self.foods[0].y - self.head.y
+        dist_food_diag = round(np.sqrt(dist_food_hor**2 + dist_food_ver**2), 4)
+        is_danger_right = (self.head.x + BLOCK_SIZE, self.head.y) in self.snake or self.head.x + BLOCK_SIZE >= self.w
+        is_danger_left = (self.head.x - BLOCK_SIZE, self.head.y) in self.snake or self.head.x - BLOCK_SIZE < 0
+        is_danger_up = (self.head.x, self.head.y + BLOCK_SIZE) in self.snake or self.head.y + BLOCK_SIZE >= self.h
+        is_danger_down = (self.head.x, self.head.y - BLOCK_SIZE) in self.snake or self.head.y - BLOCK_SIZE < 0
+        return (
+            self.direction.value,
+            dist_food_hor,
+            dist_food_ver,
+            dist_food_diag,
+            int(is_danger_right),
+            int(is_danger_left),
+            int(is_danger_up),
+            int(is_danger_down),
+        )
+
     def get_random_direction(self, current_direction):
         directions = [Direction.UP, Direction.DOWN, Direction.LEFT, Direction.RIGHT]
 
@@ -141,9 +161,7 @@ class SnakeGame:
             # Automatic mode: randomly change the snake's direction
             # self.direction = self.get_random_direction(self.direction)
             # self.automatic_move()
-            self.direction = self.get_safe_directions(
-                self.snake, self.head, self.direction, self.w, self.h
-            )
+            self.direction = self.get_safe_directions(self.snake, self.head, self.direction, self.w, self.h)
         else:
             # Handle user input
             for event in pygame.event.get():
@@ -153,9 +171,7 @@ class SnakeGame:
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_LEFT and self.direction != Direction.RIGHT:
                         self.direction = Direction.LEFT
-                    elif (
-                        event.key == pygame.K_RIGHT and self.direction != Direction.LEFT
-                    ):
+                    elif event.key == pygame.K_RIGHT and self.direction != Direction.LEFT:
                         self.direction = Direction.RIGHT
                     elif event.key == pygame.K_UP and self.direction != Direction.DOWN:
                         self.direction = Direction.UP
@@ -168,31 +184,33 @@ class SnakeGame:
 
         # Check for collisions
         if self._is_collision():
-            return True, self.score
+            return True, -10
+
+        if len(self.snake) >= self.w / BLOCK_SIZE * self.h / BLOCK_SIZE - 1:
+            self.score = 1_000_000
+            reward = self.score
+            return True, reward
 
         # Check if the snake has eaten any food
         if self.head in self.foods:
+            reward = 10
             self.score += 1
             self.foods.remove(self.head)  # Remove eaten food
             self._place_food()  # Add a new food to keep 3 on the board
         else:
+            reward = -0.1
             self.snake.pop()
 
         # Update game visuals and clock
         self._update_ui()
         self.clock.tick(self.speed)
 
-        return False, self.score
+        return False, reward
 
     def _is_collision(self):
         if self.wall_collision:
             # Check if snake hits boundary
-            if (
-                self.head.x >= self.w
-                or self.head.x < 0
-                or self.head.y >= self.h
-                or self.head.y < 0
-            ):
+            if self.head.x >= self.w or self.head.x < 0 or self.head.y >= self.h or self.head.y < 0:
                 return True
         # Check if snake hits itself
         if self.head in self.snake[1:]:
@@ -258,9 +276,7 @@ if __name__ == "__main__":
     total = 0
 
     while total < max_tries:
-        game = SnakeGame(
-            speed=20, parallel_food=300, wall_collision=True, is_auto=True
-        )  # Reset the game for each new try
+        game = SnakeGame(speed=20, parallel_food=400, wall_collision=True, is_auto=False)  # Reset the game for each new try
 
         # Main game loop
         while True:
@@ -268,7 +284,7 @@ if __name__ == "__main__":
 
             if game_over:
                 total += 1
-                print(f"Try {total}: Final Score", score)
+                print(f"Try {total}: Final Score", game.score)
                 break  # Exit current game loop when game is over
 
     pygame.quit()
