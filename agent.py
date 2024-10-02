@@ -12,12 +12,14 @@ LR = 0.001
 
 class Agent:
 
-    def __init__(self):
+    def __init__(self, path_model = None):
         self.n_games = 0
         self.epsilon = 0 # randomness
         self.gamma = 0.9 # discount rate
         self.memory = deque(maxlen=MAX_MEMORY) # popleft()
         self.model = Linear_QNet(11, 256, 3)
+        if path_model:
+            self.model.load_state_dict(torch.load(path_model))
         self.trainer = QTrainer(self.model, lr=LR, gamma=self.gamma)
 
 
@@ -100,13 +102,48 @@ class Agent:
         return final_move
 
 
+
+def play(path_model):
+    plot_scores = []
+    plot_mean_scores = []
+    total_score = 0
+    record = 0
+    agent = Agent(path_model=path_model)
+    game = SnakeGameAI()
+        
+    while True:
+        # get old state
+        state_old = agent.get_state(game)
+
+        # get move
+        final_move = agent.get_action(state_old)
+
+        # perform move and get new state
+        _, done, score = game.play_step(final_move)
+
+        if done:
+            game.reset()
+            agent.n_games += 1
+            if score > record:
+                record = score
+            print('Game', agent.n_games, 'Score', score, 'Record:', record)
+
+            plot_scores.append(score)
+            total_score += score
+            mean_score = total_score / agent.n_games
+            plot_mean_scores.append(mean_score)
+            plot(plot_scores, plot_mean_scores)
+
+
+
 def train():
     plot_scores = []
     plot_mean_scores = []
     total_score = 0
     record = 0
-    agent = Agent()
+    agent = Agent(path_model='./model/model_backup.pth')
     game = SnakeGameAI()
+        
     while True:
         # get old state
         state_old = agent.get_state(game)
@@ -132,7 +169,7 @@ def train():
 
             if score > record:
                 record = score
-                agent.model.save()
+                agent.model.save(file_name=f'model_score_{record}')
 
             print('Game', agent.n_games, 'Score', score, 'Record:', record)
 
@@ -144,4 +181,5 @@ def train():
 
 
 if __name__ == '__main__':
-    train()
+    #train()
+    play('./model/model_backup.pth')
