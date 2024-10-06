@@ -30,22 +30,27 @@ def run_snake_instance(agent: Agent, game_idx: int, memory_queue: mp.Queue):
     game = SnakeGameAI()
     iteration = 0
     best_score = 0
+    experiences = []
     while True:
         state_old = agent.get_state(game)
         final_move = agent.get_action(state_old)
         reward, done, score = game.play_step(final_move)
         state_new = agent.get_state(game)
         # Send experience tuple (state, action, reward, next_state, done) to the memory queue
-        memory_queue.put((state_old, final_move, reward, state_new, done))
+        experiences.append((state_old, final_move, reward, state_new, done))
         if done:
+            print(f'length experiences proc {game_idx}: {len(experiences)}')
+            memory_queue.put(experiences)
+            experiences = []
             game.reset()
             iteration += 1
+            agent.n_games += 2
             if score > best_score:
                 best_score = score
                 if f"model_score_{score}.pth" not in [i for i in os.listdir("./model/")]:
                     agent.model.save(f"./model/model_score_{score}.pth")
                     print(f"Saved model with score {game_idx}")
-            print("Process: ", game_idx, "Iteration", iteration, "Score", score)
+            print("Process: ", game_idx, "Iteration", iteration, "Score", score, "Memory size", len(agent.memory))
 
 
 def train_agent(agent: Agent, memory_queue):
@@ -54,17 +59,11 @@ def train_agent(agent: Agent, memory_queue):
         agent.model.load(best_model_path)
     while True:
         if not memory_queue.empty():
-            experience = memory_queue.get()
-            agent.remember(*experience)  # Unpack the experience tuple
-            agent.train_long_memory()  # Training on experiences from multiple games
-
-
-def prueba(agent, i, other):
-    import time
-
-    print(f"iniciando {i}")
-    time.sleep(3)
-    print(f"finalizo {i}")
+            game_experiences = memory_queue.get()
+            [agent.remember(state_old, final_move, reward, state_new, done) for state_old, final_move, reward, state_new, done in game_experiences]
+            agent.train_long_memory()
+        else:
+            time.sleep(1)
 
 
 if __name__ == "__main__":
@@ -73,10 +72,8 @@ if __name__ == "__main__":
     agent.model.share_memory()
     memory_queue = mp.Queue()
     stop_event = mp.Event()
-    # agent = 1
-    # memory_queue = 1
     # Create multiple processes for the Snake game instances
-    num_games = 4
+    num_games = 8
     processes = []
 
     try:
